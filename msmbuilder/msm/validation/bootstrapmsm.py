@@ -215,6 +215,7 @@ def _fit_one(jt):
     try:
         mdl.fit(sequences)
         # solve the eigensystem
+        mdl.eigenvalues_[0]
     except ValueError:
         mdl = None
         warnings.warn("One of the MSMs fitting "
