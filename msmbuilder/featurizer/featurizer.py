@@ -317,12 +317,13 @@ class RMSDFeaturizerMulti(Featurizer):
         self.align_indices = align_indices
         self.rmsd_sel_text = rmsd_sel_text
         self.align_sel_text = align_sel_text
+        self.reference_traj = reference_traj
 
         # Get the alignment indices and reference slice
         if self.align_sel_text is not None:
-            self.align_indices = reference_traj.topology.select(self.align_sel_text)
+            self.align_indices = self.reference_traj.topology.select(self.align_sel_text)
         if self.align_indices is None:
-            self.align_indices = reference_traj.topology.select_atom_indices()
+            self.align_indices = self.reference_traj.topology.select_atom_indices()
         #if self.align_indices is not None:
         #    self.sliced_reference_traj_align = reference_traj.atom_slice(self.align_indices)
         #else:
@@ -330,9 +331,9 @@ class RMSDFeaturizerMulti(Featurizer):
 
         # Get the RMSD calc indices and reference slice
         if self.rmsd_sel_text is not None:
-            self.rmsd_indices = reference_traj.topology.select(self.rmsd_sel_text)
+            self.rmsd_indices = self.reference_traj.topology.select(self.rmsd_sel_text)
         if self.rmsd_indices is None:
-            self.rmsd_indices = reference_traj.topology.select_atom_indices() 
+            self.rmsd_indices = self.reference_traj.topology.select_atom_indices() 
         #if self.rmsd_indices is not None:
         #    self.sliced_reference_traj_rmsd = reference_traj.atom_slice(self.rmsd_indices)
         #else:
@@ -363,17 +364,17 @@ class RMSDFeaturizerMulti(Featurizer):
         #else:
         #    sliced_traj_align = traj
 
-        result = np.zeros([len(traj), len(reference_traj)])
+        result = np.zeros([len(traj), len(self.reference_traj)])
         for i in range(len(traj)):
-            for j in range(len(reference_traj)):
+            for j in range(len(self.reference_traj)):
                 # First, compute the transform on the alignment
-                T = compute_transformation(traj.xyz[i][align_indices,:], reference_traj.xyz[j][align_indices,:])
+                T = compute_transformation(traj.xyz[i][self.align_indices,:], self.reference_traj.xyz[j][self.align_indices,:])
                 # Second, do the alignemnt on THE WHOLE system
                 traj.xyz[i] = T.transform(traj.xyz[i])
                 # Third, compute the RMSD of the desired selection
-                result[i,j] = np.sqrt(sum(pow(traj.xyz[i][rmsd_indices,0] - reference_traj.xyz[j][rmsd_indices,0], 2) + \
-                                          pow(traj.xyz[i][rmsd_indices,1] - reference_traj.xyz[j][rmsd_indices,1], 2) + \
-                                          pow(traj.xyz[i][rmsd_indices,2] - reference_traj.xyz[j][rmsd_indices,2], 2))/len(rmsd_indices))
+                result[i,j] = np.sqrt(sum(pow(traj.xyz[i][self.rmsd_indices,0] - self.reference_traj.xyz[j][self.rmsd_indices,0], 2) + \
+                                          pow(traj.xyz[i][self.rmsd_indices,1] - self.reference_traj.xyz[j][self.rmsd_indices,1], 2) + \
+                                          pow(traj.xyz[i][self.rmsd_indices,2] - self.reference_traj.xyz[j][self.rmsd_indices,2], 2))/len(self.rmsd_indices))
         
         return result
 
