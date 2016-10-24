@@ -11,6 +11,7 @@ from __future__ import print_function, division, absolute_import
 import warnings
 
 import mdtraj as md
+from mdtraj.geometry.alignment import *
 import numpy as np
 import sklearn.pipeline
 from scipy.stats import vonmises as vm
@@ -248,15 +249,12 @@ class SuperposeFeaturizer(Featurizer):
         x = np.sqrt(np.sum(diff2, axis=2))
         return x
 
-
 class RMSDFeaturizer(Featurizer):
     """Featurizer based on RMSD to one or more reference structures.
-
     This featurizer inputs a trajectory to be analyzed ('traj') and a
     reference trajectory ('ref') and outputs the RMSD of each frame of
     traj with respect to each frame in ref. The output is a numpy array
     with n_rows = traj.n_frames and n_columns = ref.n_frames.
-
     Parameters
     ----------
     reference_traj : md.Trajectory
@@ -286,6 +284,112 @@ class RMSDFeaturizer(Featurizer):
     def partial_transform(self, traj):
         """Featurize an MD trajectory into a vector space via distance
         after superposition
+        Parameters
+        ----------
+        traj : mdtraj.Trajectory
+            A molecular dynamics trajectory to featurize.
+        Returns
+        -------
+        features : np.ndarray, shape=(n_frames, n_ref_frames)
+            The RMSD value of each frame of the input trajectory to be
+            featurized versus each frame in the reference trajectory. The
+            number of features is the number of reference frames.
+        See Also
+        --------
+        transform : simultaneously featurize a collection of MD trajectories
+        """
+        if self.atom_indices is not None:
+            sliced_traj = traj.atom_slice(self.atom_indices)
+        else:
+            sliced_traj = traj
+        result = libdistance.cdist(
+            sliced_traj, self.sliced_reference_traj, 'rmsd'
+        )
+        return result
+
+
+class RMSDFeaturizerMulti(Featurizer):
+    """Featurizer based on RMSD to one or more reference structures.
+
+    This featurizer inputs a trajectory to be analyzed ('traj') and a
+    reference trajectory ('ref') and outputs the RMSD of each frame of
+    traj with respect to each frame in ref. The RMSD can be computed on
+    a different selection than the alignment. The output is a numpy array
+    with n_rows = traj.n_frames and n_columns = ref.n_frames.
+
+    Parameters
+    ----------
+    reference_traj : md.Trajectory
+        The reference conformations to superpose each frame with respect to
+    rmsd_indices : np.ndarray, shape=(n_atoms,), dtype=int
+        The indices of the atoms to compute the distances with.
+        If not specified, all atoms are used.
+    rmsd_indices2 : np.ndarray, shape=(n_atoms,), dtype=int
+        If your target traj has different indices than the reference,
+        you can specify those indices here.
+    align_indices : np.ndarray, shape=(n_atoms,), dtype=int
+        The indices with which to align the reference and target.
+        If not specified, rmsd_indices is used.
+    align_indices2 : np.ndarray, shape=(n_atoms,), dtype=int
+        If your target traj has different indices than the reference,
+        you can specify those indices here.
+    rmsd_sel_text : str
+        As an alterantive to rmsd_indices, you can supply a selection text
+        that conforms to MDTraj's atom selection language. See: http://mdtraj.org/1.7.2/examples/atom-selection.html#Atom-Selection-Language
+    align_sel_text : str
+        As an alterantive to align_indices, you can supply a selection text
+        that conforms to MDTraj's atom selection language. See: http://mdtraj.org/1.7.2/examples/atom-selection.html#Atom-Selection-Language
+    trj0
+        Deprecated. Please use reference_traj.
+    """
+
+    def __init__(self, reference_traj=None, rmsd_indices=None, rmsd_indices2=None,
+                 align_indices=None, align_indices2=None,
+                 rmsd_sel_text=None, rmsd_sel_text2=None,
+                 align_sel_text=None, align_sel_text2=None, trj0=None):
+        if trj0 is not None:
+            warnings.warn("trj0 is deprecated. Please use reference_traj",
+                          DeprecationWarning)
+            reference_traj = trj0
+        else:
+            if reference_traj is None:
+                raise ValueError("Please specify a reference trajectory")
+
+        self.rmsd_indices = rmsd_indices
+        self.rmsd_indices2 = rmsd_indices2
+        self.align_indices = align_indices
+        self.align_indices2 = align_indices2
+        self.rmsd_sel_text = rmsd_sel_text
+        self.rmsd_sel_text2 = rmsd_sel_text2
+        self.align_sel_text = align_sel_text
+        self.align_sel_text2 = align_sel_text2
+        self.reference_traj = reference_traj
+
+        # Get the alignment indices
+        if self.align_sel_text is not None:
+            self.align_indices = self.reference_traj.topology.select(self.align_sel_text)
+            if self.align_indices2 is None and self.align_sel_text2 is None:
+                self.align_indices2 = self.align_indices
+        # If no indices are specified, use all indices
+        if self.align_indices is None:
+            self.align_indices = self.reference_traj.topology.select_atom_indices()
+            if self.align_indices2 is None and self.align_sel_text2 is None:
+                self.align_indices2 = self.align_indices
+
+        # Get the RMSD calc indices
+        if self.rmsd_sel_text is not None:
+            self.rmsd_indices = self.reference_traj.topology.select(self.rmsd_sel_text)
+            if self.rmsd_indices2 is None and self.rmsd_sel_text2 is None:
+                self.rmsd_indices2 = self.rmsd_indices
+        # If no indices are specified, use all indices
+        if self.rmsd_indices is None:
+            self.rmsd_indices = self.reference_traj.topology.select_atom_indices() 
+            if self.rmsd_indices2 is None and self.rmsd_sel_text2 is None:
+                self.rmsd_indices2 = self.rmsd_indices
+
+    def partial_transform(self, traj):
+        """Featurize an MD trajectory into a vector space via distance
+        after superposition
 
         Parameters
         ----------
@@ -303,13 +407,26 @@ class RMSDFeaturizer(Featurizer):
         --------
         transform : simultaneously featurize a collection of MD trajectories
         """
-        if self.atom_indices is not None:
-            sliced_traj = traj.atom_slice(self.atom_indices)
-        else:
-            sliced_traj = traj
-        result = libdistance.cdist(
-            sliced_traj, self.sliced_reference_traj, 'rmsd'
-        )
+        if self.align_sel_text2 is not None:
+            self.align_indices2 = traj.topology.select(self.align_sel_text2)
+        if self.rmsd_sel_text2 is not None:
+            self.rmsd_indices2 = traj.topology.select(self.rmsd_sel_text2)
+            # If rmsd_sel_text and self.rmsd_sel_text2 were given, but no align_sel_text2 given
+            if self.align_indices2 is None:
+                self.align_indices2 = self.rmsd_indices2
+
+        result = np.zeros([len(traj), len(self.reference_traj)])
+        for i in range(len(traj)):
+            for j in range(len(self.reference_traj)):
+                # First, compute the transform on the alignment atoms
+                T = compute_transformation(traj.xyz[i][self.align_indices2,:], self.reference_traj.xyz[j][self.align_indices,:])
+                # Second, do the alignemnt on THE WHOLE system
+                traj.xyz[i] = T.transform(traj.xyz[i])
+                # Third, compute the RMSD of the desired selection
+                result[i,j] = np.sqrt(sum(pow(traj.xyz[i][self.rmsd_indices2,0] - self.reference_traj.xyz[j][self.rmsd_indices,0], 2) + \
+                                          pow(traj.xyz[i][self.rmsd_indices2,1] - self.reference_traj.xyz[j][self.rmsd_indices,1], 2) + \
+                                          pow(traj.xyz[i][self.rmsd_indices2,2] - self.reference_traj.xyz[j][self.rmsd_indices,2], 2))/len(self.rmsd_indices))
+        
         return result
 
 
