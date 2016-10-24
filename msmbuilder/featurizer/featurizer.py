@@ -291,9 +291,15 @@ class RMSDFeaturizerMulti(Featurizer):
     rmsd_indices : np.ndarray, shape=(n_atoms,), dtype=int
         The indices of the atoms to compute the distances with.
         If not specified, all atoms are used.
+    rmsd_indices2 : np.ndarray, shape=(n_atoms,), dtype=int
+        If your target traj has different indices than the reference,
+        you can specify those indices here.
     align_indices : np.ndarray, shape=(n_atoms,), dtype=int
         The indices with which to align the reference and target.
         If not specified, rmsd_indices is used.
+    align_indices2 : np.ndarray, shape=(n_atoms,), dtype=int
+        If your target traj has different indices than the reference,
+        you can specify those indices here.
     rmsd_sel_text : str
         As an alterantive to rmsd_indices, you can supply a selection text
         that conforms to MDTraj's atom selection language. See: http://mdtraj.org/1.7.2/examples/atom-selection.html#Atom-Selection-Language
@@ -304,7 +310,10 @@ class RMSDFeaturizerMulti(Featurizer):
         Deprecated. Please use reference_traj.
     """
 
-    def __init__(self, reference_traj=None, rmsd_indices=None, align_indices=None, rmsd_sel_text=None, align_sel_text=None, trj0=None):
+    def __init__(self, reference_traj=None, rmsd_indices=None, rmsd_indices2=None,
+                 align_indices=None, align_indices2=None,
+                 rmsd_sel_text=None, rmsd_sel_text2=None,
+                 align_sel_text=None, align_sel_text2=None, trj0=None):
         if trj0 is not None:
             warnings.warn("trj0 is deprecated. Please use reference_traj",
                           DeprecationWarning)
@@ -314,30 +323,36 @@ class RMSDFeaturizerMulti(Featurizer):
                 raise ValueError("Please specify a reference trajectory")
 
         self.rmsd_indices = rmsd_indices
+        self.rmsd_indices2 = rmsd_indices2
         self.align_indices = align_indices
+        self.align_indices2 = align_indices2
         self.rmsd_sel_text = rmsd_sel_text
+        self.rmsd_sel_text2 = rmsd_sel_text2
         self.align_sel_text = align_sel_text
+        self.align_sel_text2 = align_sel_text2
         self.reference_traj = reference_traj
 
-        # Get the alignment indices and reference slice
+        # Get the alignment indices
         if self.align_sel_text is not None:
             self.align_indices = self.reference_traj.topology.select(self.align_sel_text)
+            if self.align_indices2 is None and self.align_sel_text2 is None:
+                self.align_indices2 = self.align_indices
+        # If no indices are specified, use all indices
         if self.align_indices is None:
             self.align_indices = self.reference_traj.topology.select_atom_indices()
-        #if self.align_indices is not None:
-        #    self.sliced_reference_traj_align = reference_traj.atom_slice(self.align_indices)
-        #else:
-        #    self.sliced_reference_traj_align = reference_traj
+            if self.align_indices2 is None and self.align_sel_text2 is None:
+                self.align_indices2 = self.align_indices
 
-        # Get the RMSD calc indices and reference slice
+        # Get the RMSD calc indices
         if self.rmsd_sel_text is not None:
             self.rmsd_indices = self.reference_traj.topology.select(self.rmsd_sel_text)
+            if self.rmsd_indices2 is None and self.rmsd_sel_text2 is None:
+                self.rmsd_indices2 = self.rmsd_indices
+        # If no indices are specified, use all indices
         if self.rmsd_indices is None:
             self.rmsd_indices = self.reference_traj.topology.select_atom_indices() 
-        #if self.rmsd_indices is not None:
-        #    self.sliced_reference_traj_rmsd = reference_traj.atom_slice(self.rmsd_indices)
-        #else:
-        #    self.sliced_reference_traj_rmsd = reference_traj
+            if self.rmsd_indices2 is None and self.rmsd_sel_text2 is None:
+                self.rmsd_indices2 = self.rmsd_indices
 
     def partial_transform(self, traj):
         """Featurize an MD trajectory into a vector space via distance
@@ -359,22 +374,25 @@ class RMSDFeaturizerMulti(Featurizer):
         --------
         transform : simultaneously featurize a collection of MD trajectories
         """
-        #if self.align_indices is not None:
-        #    sliced_traj_align = traj.atom_slice(self.align_indices)
-        #else:
-        #    sliced_traj_align = traj
+        if self.align_sel_text2 is not None:
+            self.align_indices2 = traj.topology.select(self.align_sel_text2)
+        if self.rmsd_sel_text2 is not None:
+            self.rmsd_indices2 = traj.topology.select(self.rmsd_sel_text2)
+            # If rmsd_sel_text and self.rmsd_sel_text2 were given, but no align_sel_text2 given
+            if self.align_indices2 is None:
+                self.align_indices2 = self.rmsd_indices2
 
         result = np.zeros([len(traj), len(self.reference_traj)])
         for i in range(len(traj)):
             for j in range(len(self.reference_traj)):
-                # First, compute the transform on the alignment
-                T = compute_transformation(traj.xyz[i][self.align_indices,:], self.reference_traj.xyz[j][self.align_indices,:])
+                # First, compute the transform on the alignment atoms
+                T = compute_transformation(traj.xyz[i][self.align_indices2,:], self.reference_traj.xyz[j][self.align_indices,:])
                 # Second, do the alignemnt on THE WHOLE system
                 traj.xyz[i] = T.transform(traj.xyz[i])
                 # Third, compute the RMSD of the desired selection
-                result[i,j] = np.sqrt(sum(pow(traj.xyz[i][self.rmsd_indices,0] - self.reference_traj.xyz[j][self.rmsd_indices,0], 2) + \
-                                          pow(traj.xyz[i][self.rmsd_indices,1] - self.reference_traj.xyz[j][self.rmsd_indices,1], 2) + \
-                                          pow(traj.xyz[i][self.rmsd_indices,2] - self.reference_traj.xyz[j][self.rmsd_indices,2], 2))/len(self.rmsd_indices))
+                result[i,j] = np.sqrt(sum(pow(traj.xyz[i][self.rmsd_indices2,0] - self.reference_traj.xyz[j][self.rmsd_indices,0], 2) + \
+                                          pow(traj.xyz[i][self.rmsd_indices2,1] - self.reference_traj.xyz[j][self.rmsd_indices,1], 2) + \
+                                          pow(traj.xyz[i][self.rmsd_indices2,2] - self.reference_traj.xyz[j][self.rmsd_indices,2], 2))/len(self.rmsd_indices))
         
         return result
 
