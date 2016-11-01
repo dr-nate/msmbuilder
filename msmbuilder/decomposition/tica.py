@@ -10,6 +10,7 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import scipy.linalg
+import scipy.sparse
 import warnings
 from ..base import BaseEstimator
 from ..utils import check_iter_of_sequences, array2d
@@ -376,6 +377,8 @@ class tICA(BaseEstimator, TransformerMixin):
         return self.transform(sequences)
 
     def _fit(self, X):
+        if scipy.sparse.issparse(X):
+            X = X.toarray()
         X = np.asarray(array2d(X), dtype=np.float64)
         self._initialize(X.shape[1])
 
