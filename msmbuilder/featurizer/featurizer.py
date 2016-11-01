@@ -15,6 +15,7 @@ from mdtraj.geometry.alignment import *
 import numpy as np
 import sklearn.pipeline
 from scipy.stats import vonmises as vm
+from scipy.sparse import lil_matrix
 from msmbuilder import libdistance
 import itertools
 from sklearn.base import TransformerMixin
@@ -1198,17 +1199,26 @@ class BinaryContactFeaturizer(ContactFeaturizer):
     cutoff : float, default=0.8
         Distances shorter than CUTOFF [nm] are returned as '1' and
         distances longer than CUTOFF are returned as '0'.
+    sparse : bool, default=False
+        Use sparse matrices to represent the contacts. Highly memory 
+        efficient for large, sparse matrices.
     """
 
-    def __init__(self, contacts='all', scheme='closest-heavy', ignore_nonprotein=True, cutoff=0.8):
+    def __init__(self, contacts='all', scheme='closest-heavy', ignore_nonprotein=True, 
+                                                               cutoff=0.8,
+                                                               sparse=False):
         super(BinaryContactFeaturizer, self).__init__(contacts=contacts, scheme=scheme,
                                                     ignore_nonprotein=ignore_nonprotein)
+        self.sparse = sparse
         if cutoff < 0:
             raise ValueError('cutoff must be a positive distance [nm]')
         self.cutoff = cutoff
 
     def _transform(self, distances):
-        return distances < self.cutoff
+        if self.sparse:
+            return lil_matrix(distances < self.cutoff)
+        else:
+            return distances < self.cutoff
 
 
 class LogisticContactFeaturizer(ContactFeaturizer):
