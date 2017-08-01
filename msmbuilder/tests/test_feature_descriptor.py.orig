@@ -13,7 +13,11 @@ from numpy.testing.decorators import skipif
 from msmbuilder.example_datasets import MinimalFsPeptide
 from msmbuilder.feature_selection import FeatureSelector
 from msmbuilder.featurizer import DihedralFeaturizer, AlphaAngleFeaturizer, \
+<<<<<<< HEAD
     KappaAngleFeaturizer, SASAFeaturizer, ContactFeaturizer, VonMisesFeaturizer
+=======
+    KappaAngleFeaturizer, ContactFeaturizer, VonMisesFeaturizer,AtomPairsFeaturizer
+>>>>>>> master
 
 trajectories = MinimalFsPeptide().get_cached().trajectories
 top = trajectories[0].topology

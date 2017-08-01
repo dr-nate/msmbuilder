@@ -4,7 +4,11 @@
 # All rights reserved.
 import numpy as np
 from collections import OrderedDict
+<<<<<<< HEAD
+
+=======
 from six import string_types
+>>>>>>> master
 from ..featurizer import Featurizer
 
 
