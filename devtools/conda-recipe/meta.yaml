@@ -24,7 +24,7 @@ requirements:
     - setuptools
     - numpy x.x
     - scipy
-    - pandas <0.20
+    - pandas
     - six
     - mdtraj
     - scikit-learn
