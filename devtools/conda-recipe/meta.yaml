@@ -18,7 +18,7 @@ requirements:
     - setuptools
     - cython
     - numpy x.x
-    - mdtraj
+    - mdtraj=1.9.2
   run:
     - python
     - setuptools
